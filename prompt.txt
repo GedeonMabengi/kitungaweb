@@ -1,0 +1,73 @@
+Les seeders actuelle dans mon projet sont ils en accord avec
+l'architecture de ma base des donnees ? Parce Malgre les
+categories presentes dans les seeders, dans lA PAGE
+pour ajouter un produit, il n'y a pas les categories 
+preremplie pour choisir et ajouter un produit.
+
+Je veux que dans la page pour ajouter un produit, qu'il y ait
+la possibilite de voir l'image que l'on a telecharger comme
+image du produit.
+
+dans la page http://127.0.0.1:8000/reports/stock precisement
+dans la partie :
+Mouvements recents
+Coca cola
+
+Jean Stock � 01 avr. 2026
+
+OUT � 3
+
+Coca cola
+
+Jean Stock � 01 avr. 2026
+
+IN � 15
+
+on a des caractere qui ne
+s'affiche pas correctement il faut regler cela
+
+A part cela, le parcours pour le gestionnaire des stock
+est bien fait !
+
+Pour le vendeur tout est presque parfait ! Mais je ne vois pas
+l'option pour imprimer le recu, Un fois la vente effectue
+
+Je me pose une question : Le vendeur et le caissier d'une meme
+organisation doivent ouvrire
+deux caisse differente le meme jour ? parce que je remarque apres
+avoir fait une vente entant que vendeur je me suis deconnecter
+mais quand je me connecte en tant que caisser, il m'ait demander
+ouvir une nouvelle caisse.
+
+Je veux qu'une fois le vendeur ouvre la caisse,QU'il EFFECTUE une
+VENTE, ce solde doit egalement visible par le caissier, l'adimin
+et par consequent ne plus leur demander
+d'ouvrire une nouvelle caisse. Le caisser pourra
+voir tout les produit vendu par le vendeur de son organisation
+mais n'a pas besoin de voir dans son dashboard le nombre des
+ventes donc il faut enleve cette partie dans dashboard :
+
+-----------
+Mes ventes
+
+0
+-----------
+
+Du cote changement de devise, il y a un probleme : La devise change
+sans conversion. 15000fc n'est pas egale a 15000$. Il faut mettre au
+point un mecanisme de conversion en utilisant un api de convertion
+
+==================================================================================
+
+Finalement l'application flutter de ce saas passe parfaitement l'etape de l'authentification sans
+probleme ! mais il y a un probleme avec la fidelite de l'interface. La version web et la version
+mobile flutter ne se ressemble pas. On va y remedier point apres points.
+
+1) Pour me rassuer que tu sais quoi faire,
+Commence d'abord par me decrire les elements que l'on trouve a la page http://127.0.0.1:8000/stock/movements
+si c'est l'admin qui est connecter, puis pour le stockeurs.
+Dit moi si tu peux reproduire fidelement ces elements d'interface avec affichage
+conditionnelle en fonction du role en gardant le meme style de design en flutter que dans la versions
+react/laravel.
+
+2) Ensuite on va passer a d'autre page.
