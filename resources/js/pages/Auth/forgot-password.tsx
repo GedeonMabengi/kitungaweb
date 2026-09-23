@@ -6,7 +6,7 @@ import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AuthLayout from '@/layouts/auth-layout';
+import AuthLayout from '@/Layouts/auth-layout';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
