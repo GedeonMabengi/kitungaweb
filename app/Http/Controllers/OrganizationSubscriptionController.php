@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -60,7 +61,8 @@ class OrganizationSubscriptionController extends Controller
                 'status' => 'pending',
             ]);
 
-            $response = Http::timeout(30)->post(
+            try {
+                $response = Http::timeout(30)->post(
                 rtrim((string) config('services.cinetpay.base_url'), '/') . '/payment',
                 [
                     'apikey' => config('services.cinetpay.api_key'),
@@ -80,7 +82,23 @@ class OrganizationSubscriptionController extends Controller
                         'payment_id' => $payment->id,
                     ]),
                 ],
-            )->throw()->json();
+                )->throw()->json();
+            } catch (ConnectionException $e) {
+                $payment->update([
+                    'status' => 'failed',
+                    'raw_payload' => [
+                        'error' => 'connection',
+                        'message' => $e->getMessage(),
+                    ],
+                ]);
+
+                // keep subscription pending and return no payment URL
+                $subscription->update(['status' => 'pending']);
+
+                return [
+                    'payment_url' => null,
+                ];
+            }
 
             $payment->update([
                 'provider_transaction_id' => data_get($response, 'data.payment_token')
@@ -137,14 +155,25 @@ class OrganizationSubscriptionController extends Controller
             return;
         }
 
-        $verification = Http::timeout(30)->post(
-            rtrim((string) config('services.cinetpay.base_url'), '/') . '/payment/check',
-            [
-                'apikey' => config('services.cinetpay.api_key'),
-                'site_id' => config('services.cinetpay.site_id'),
-                'transaction_id' => $transactionId,
-            ],
-        )->throw()->json();
+        try {
+            $verification = Http::timeout(30)->post(
+                rtrim((string) config('services.cinetpay.base_url'), '/') . '/payment/check',
+                [
+                    'apikey' => config('services.cinetpay.api_key'),
+                    'site_id' => config('services.cinetpay.site_id'),
+                    'transaction_id' => $transactionId,
+                ],
+            )->throw()->json();
+        } catch (ConnectionException $e) {
+            $payment->update([
+                'verified_payload' => [
+                    'error' => 'connection',
+                    'message' => $e->getMessage(),
+                ],
+            ]);
+
+            return;
+        }
 
         $status = strtoupper((string) (data_get($verification, 'data.status')
             ?? data_get($verification, 'data.payment_status')

@@ -19,7 +19,7 @@ export default function UserForm({ user = null, roles, mode = 'create' }) {
     const submit = (event) => {
         event.preventDefault();
 
-        const request = form.transform((data) => {
+        form.transform((data) => {
             const normalizedData = {
                 ...data,
                 phone: data.phone || null,
@@ -36,12 +36,12 @@ export default function UserForm({ user = null, roles, mode = 'create' }) {
         });
 
         if (isEditing) {
-            request.post(adminUserRoutes.update.url(user.id));
+            form.post(adminUserRoutes.update.url(user.id));
 
             return;
         }
 
-        request.post(adminUserRoutes.store.url());
+        form.post(adminUserRoutes.store.url());
     };
 
     return (

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d912459d-3224-458b-b7a2-a50283fed87c"
+      }
+    },
+    "android": {
+      "package": "com.gmkdev.kitungaweb"
+    }
+  }
+}
