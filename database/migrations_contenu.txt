@@ -1,0 +1,1377 @@
+================================================================================
+EXTRACTION DU CONTENU DU DOSSIER : /home/boy/gedeoncode/Kitungaweb/database/migrations
+Date : 2026-09-24 02:11:35
+================================================================================
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 0001_01_01_000000_create_users_table.php
+📏 Taille : 1.44 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 0001_01_01_000001_create_cache_table.php
+📏 Taille : 867 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cache', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->mediumText('value');
+            $table->integer('expiration')->index();
+        });
+
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cache');
+        Schema::dropIfExists('cache_locks');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 0001_01_01_000002_create_jobs_table.php
+📏 Taille : 1.77 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        Schema::create('job_batches', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->integer('total_jobs');
+            $table->integer('pending_jobs');
+            $table->integer('failed_jobs');
+            $table->longText('failed_job_ids');
+            $table->mediumText('options')->nullable();
+            $table->integer('cancelled_at')->nullable();
+            $table->integer('created_at');
+            $table->integer('finished_at')->nullable();
+        });
+
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('jobs');
+        Schema::dropIfExists('job_batches');
+        Schema::dropIfExists('failed_jobs');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2025_02_07_111300_create_cash_registers_table.php
+📏 Taille : 1.39 KB
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000007_create_cash_registers_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('cash_registers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete(); // Caissier
+            $table->date('date');
+            $table->decimal('opening_balance', 15, 2)->default(0);
+            $table->decimal('total_input', 15, 2)->default(0);
+            $table->decimal('total_output', 15, 2)->default(0);
+            $table->decimal('expected_balance', 15, 2)->default(0);
+            $table->decimal('actual_balance', 15, 2)->nullable();
+            $table->decimal('difference', 15, 2)->nullable();
+            $table->enum('status', ['OPEN', 'CLOSED'])->default('OPEN');
+            $table->timestamp('opened_at');
+            $table->timestamp('closed_at')->nullable();
+            $table->text('opening_notes')->nullable();
+            $table->text('closing_notes')->nullable();
+            $table->timestamps();
+
+            $table->unique(['user_id', 'date']);
+            $table->index(['date', 'status']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('cash_registers');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2025_08_14_170933_add_two_factor_columns_to_users_table.php
+📏 Taille : 953 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->text('two_factor_secret')->after('password')->nullable();
+            $table->text('two_factor_recovery_codes')->after('two_factor_secret')->nullable();
+            $table->timestamp('two_factor_confirmed_at')->after('two_factor_recovery_codes')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn([
+                'two_factor_secret',
+                'two_factor_recovery_codes',
+                'two_factor_confirmed_at',
+            ]);
+        });
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_110407_add_fields_to_users_table.php
+📏 Taille : 848 B
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000001_add_fields_to_users_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('phone')->nullable()->after('email');
+            $table->string('avatar')->nullable()->after('phone');
+            $table->boolean('is_active')->default(true)->after('avatar');
+            $table->timestamp('last_login_at')->nullable()->after('is_active');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn(['phone', 'avatar', 'is_active', 'last_login_at']);
+        });
+    }
+};
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_110743_create_categories_table.php
+📏 Taille : 791 B
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000002_create_categories_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('categories', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->text('description')->nullable();
+            $table->string('image')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('categories');
+    }
+};
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_110853_create_articles_table.php
+📏 Taille : 1.91 KB
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000003_create_articles_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('articles', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('category_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->string('sku')->unique()->nullable(); // Stock Keeping Unit
+            $table->string('barcode')->unique()->nullable();
+            $table->text('description')->nullable();
+            $table->decimal('price', 15, 2); // Prix unitaire ou par paquet selon unit_type
+            $table->decimal('cost_price', 15, 2)->nullable(); // Prix d'achat
+            $table->enum('unit_type', ['PACK', 'UNIT'])->default('UNIT');
+            $table->integer('units_per_pack')->nullable(); // Nombre d'unités par paquet
+            $table->decimal('unit_price', 15, 2)->nullable(); // Prix par unité si vendu en pack
+            $table->integer('initial_quantity')->default(0);
+            $table->integer('current_stock')->default(0);
+            $table->integer('alert_threshold')->default(10); // Seuil d'alerte stock bas
+            $table->date('expiration_date')->nullable();
+            $table->string('image')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('allow_unit_sale')->default(true); // Permettre vente à l'unité si pack
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['name', 'sku', 'barcode']);
+            $table->index('current_stock');
+            $table->index('expiration_date');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('articles');
+    }
+};
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_110938_create_stock_movements_table.php
+📏 Taille : 1.28 KB
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000004_create_stock_movements_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('stock_movements', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('article_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->enum('movement_type', ['IN', 'OUT', 'ADJUSTMENT', 'SALE', 'RETURN']);
+            $table->integer('quantity');
+            $table->enum('quantity_type', ['PACK', 'UNIT'])->default('UNIT');
+            $table->integer('stock_before');
+            $table->integer('stock_after');
+            $table->string('reason')->nullable();
+            $table->string('reference')->nullable(); // Numéro de bon, facture, etc.
+            $table->text('notes')->nullable();
+            $table->timestamps();
+
+            $table->index(['article_id', 'created_at']);
+            $table->index('movement_type');
+            $table->index('reference');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('stock_movements');
+    }
+};
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_111133_create_sales_table.php
+📏 Taille : 1.61 KB
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000005_create_sales_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('sales', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete(); // Vendeur
+            $table->foreignId('cash_register_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('reference')->unique();
+            $table->decimal('subtotal', 15, 2)->default(0);
+            $table->decimal('discount', 15, 2)->default(0);
+            $table->decimal('tax', 15, 2)->default(0);
+            $table->decimal('total_amount', 15, 2)->default(0);
+            $table->enum('payment_method', ['CASH', 'CARD', 'MOBILE', 'CREDIT', 'OTHER'])->default('CASH');
+            $table->enum('payment_status', ['PENDING', 'PARTIAL', 'PAID', 'CANCELLED'])->default('PAID');
+            $table->decimal('amount_paid', 15, 2)->default(0);
+            $table->decimal('change_amount', 15, 2)->default(0);
+            $table->string('customer_name')->nullable();
+            $table->string('customer_phone')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['user_id', 'created_at']);
+            $table->index('reference');
+            $table->index('payment_status');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('sales');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_111232_create_sale_items_table.php
+📏 Taille : 1003 B
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000006_create_sale_items_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('sale_items', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('sale_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('article_id')->constrained()->cascadeOnDelete();
+            $table->integer('quantity');
+            $table->enum('quantity_type', ['PACK', 'UNIT'])->default('UNIT');
+            $table->decimal('unit_price', 15, 2);
+            $table->decimal('discount', 15, 2)->default(0);
+            $table->decimal('subtotal', 15, 2);
+            $table->timestamps();
+
+            $table->index(['sale_id', 'article_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('sale_items');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_111910_create_cash_inputs_table.php
+📏 Taille : 1.04 KB
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000008_create_cash_inputs_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('cash_inputs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('cash_register_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('sale_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->decimal('amount', 15, 2);
+            $table->enum('source', ['SALE', 'DEPOSIT', 'REFUND', 'OTHER'])->default('SALE');
+            $table->string('reference')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+
+            $table->index(['cash_register_id', 'created_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('cash_inputs');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_112051_create_cash_outputs_table.php
+📏 Taille : 986 B
+--------------------------------------------------------------------------------
+
+<?php
+// database/migrations/2024_01_01_000009_create_cash_outputs_table.php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('cash_outputs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('cash_register_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->decimal('amount', 15, 2);
+            $table->string('reason');
+            $table->string('beneficiary')->nullable();
+            $table->string('reference')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+
+            $table->index(['cash_register_id', 'created_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('cash_outputs');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_155304_create_personal_access_tokens_table.php
+📏 Taille : 863 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->text('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable()->index();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_02_07_155341_create_permission_tables.php
+📏 Taille : 6.37 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        $teams = config('permission.teams');
+        $tableNames = config('permission.table_names');
+        $columnNames = config('permission.column_names');
+        $pivotRole = $columnNames['role_pivot_key'] ?? 'role_id';
+        $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
+
+        throw_if(empty($tableNames), Exception::class, 'Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        throw_if($teams && empty($columnNames['team_foreign_key'] ?? null), Exception::class, 'Error: team_foreign_key on config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+
+        Schema::create($tableNames['permissions'], static function (Blueprint $table) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // permission id
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], static function (Blueprint $table) use ($teams, $columnNames) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // role id
+            if ($teams || config('permission.testing')) { // permission.testing is a fix for sqlite testing
+                $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable();
+                $table->index($columnNames['team_foreign_key'], 'roles_team_foreign_key_index');
+            }
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+            if ($teams || config('permission.testing')) {
+                $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
+            } else {
+                $table->unique(['name', 'guard_name']);
+            }
+        });
+
+        Schema::create($tableNames['model_has_permissions'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotPermission, $teams) {
+            $table->unsignedBigInteger($pivotPermission);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            } else {
+                $table->primary([$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            }
+
+        });
+
+        Schema::create($tableNames['model_has_roles'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotRole, $teams) {
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            } else {
+                $table->primary([$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            }
+        });
+
+        Schema::create($tableNames['role_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+
+            $table->primary([$pivotPermission, $pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
+
+        app('cache')
+            ->store(config('permission.cache.store') != 'default' ? config('permission.cache.store') : null)
+            ->forget(config('permission.cache.key'));
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        $tableNames = config('permission.table_names');
+
+        throw_if(empty($tableNames), Exception::class, 'Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+
+        Schema::drop($tableNames['role_has_permissions']);
+        Schema::drop($tableNames['model_has_roles']);
+        Schema::drop($tableNames['model_has_permissions']);
+        Schema::drop($tableNames['roles']);
+        Schema::drop($tableNames['permissions']);
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_21_132022_create_organizations_table.php
+📏 Taille : 1010 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('organizations', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->foreignId('owner_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('billing_email')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('country_code', 5)->nullable();
+            $table->string('currency', 10)->default('XAF');
+            $table->string('status')->default('active');
+            $table->timestamp('trial_ends_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('organizations');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_21_132023_create_organization_invitations_table.php
+📏 Taille : 953 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('organization_invitations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('invited_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('email');
+            $table->string('role');
+            $table->uuid('token')->unique();
+            $table->string('status')->default('pending');
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('accepted_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('organization_invitations');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_21_132023_create_organization_subscriptions_table.php
+📏 Taille : 1.31 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('organization_subscriptions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->string('plan_code');
+            $table->string('plan_name');
+            $table->string('billing_cycle')->default('monthly');
+            $table->decimal('amount', 12, 2);
+            $table->string('currency', 10)->default('USD');
+            $table->unsignedInteger('seats_limit')->nullable();
+            $table->json('features')->nullable();
+            $table->string('provider')->default('cinetpay');
+            $table->string('provider_reference')->nullable();
+            $table->string('status')->default('pending');
+            $table->timestamp('starts_at')->nullable();
+            $table->timestamp('ends_at')->nullable();
+            $table->timestamp('trial_ends_at')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('organization_subscriptions');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_21_132024_create_subscription_payments_table.php
+📏 Taille : 1.23 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('subscription_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('organization_subscription_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('transaction_id')->unique();
+            $table->string('provider_transaction_id')->nullable();
+            $table->text('provider_payment_url')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('currency', 10)->default('USD');
+            $table->string('customer_name');
+            $table->string('customer_email');
+            $table->string('status')->default('pending');
+            $table->json('raw_payload')->nullable();
+            $table->json('verified_payload')->nullable();
+            $table->timestamp('paid_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('subscription_payments');
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_21_132104_add_organization_columns_to_core_tables.php
+📏 Taille : 2.98 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->foreignId('organization_id')
+                ->nullable()
+                ->after('id')
+                ->constrained()
+                ->nullOnDelete();
+        });
+
+        foreach ([
+            'categories',
+            'articles',
+            'stock_movements',
+            'sales',
+            'sale_items',
+            'cash_registers',
+            'cash_inputs',
+            'cash_outputs',
+        ] as $tableName) {
+            Schema::table($tableName, function (Blueprint $table) use ($tableName) {
+                $table->foreignId('organization_id')
+                    ->nullable()
+                    ->after('id')
+                    ->constrained()
+                    ->nullOnDelete();
+            });
+        }
+
+        $defaultOrganizationId = DB::table('organizations')->value('id');
+
+        if (! $defaultOrganizationId) {
+            $defaultOrganizationId = DB::table('organizations')->insertGetId([
+                'name' => 'Organization par defaut',
+                'slug' => 'organization-par-defaut-' . Str::lower(Str::random(5)),
+                'status' => 'active',
+                'currency' => 'XAF',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('users')
+            ->whereNull('organization_id')
+            ->update(['organization_id' => $defaultOrganizationId]);
+
+        foreach ([
+            'categories',
+            'articles',
+            'stock_movements',
+            'sales',
+            'sale_items',
+            'cash_registers',
+            'cash_inputs',
+            'cash_outputs',
+        ] as $tableName) {
+            DB::table($tableName)
+                ->whereNull('organization_id')
+                ->update(['organization_id' => $defaultOrganizationId]);
+        }
+
+        $ownerId = DB::table('users')
+            ->orderBy('id')
+            ->value('id');
+
+        if ($ownerId) {
+            DB::table('organizations')
+                ->where('id', $defaultOrganizationId)
+                ->update(['owner_user_id' => $ownerId]);
+        }
+    }
+
+    public function down(): void
+    {
+        foreach ([
+            'cash_outputs',
+            'cash_inputs',
+            'cash_registers',
+            'sale_items',
+            'sales',
+            'stock_movements',
+            'articles',
+            'categories',
+        ] as $tableName) {
+            Schema::table($tableName, function (Blueprint $table) {
+                $table->dropConstrainedForeignId('organization_id');
+            });
+        }
+
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropConstrainedForeignId('organization_id');
+        });
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_23_000001_align_saas_schema_with_current_application.php
+📏 Taille : 2.6 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $defaultOrganizationId = DB::table('organizations')->value('id');
+
+        if (! $defaultOrganizationId) {
+            $defaultOrganizationId = DB::table('organizations')->insertGetId([
+                'name' => 'Kitunga Default',
+                'slug' => 'kitunga-default-' . Str::lower(Str::random(5)),
+                'status' => 'active',
+                'currency' => 'XAF',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        foreach ([
+            'users',
+            'categories',
+            'articles',
+            'stock_movements',
+            'sales',
+            'sale_items',
+            'cash_registers',
+            'cash_inputs',
+            'cash_outputs',
+        ] as $tableName) {
+            DB::table($tableName)
+                ->whereNull('organization_id')
+                ->update(['organization_id' => $defaultOrganizationId]);
+        }
+
+        if (Schema::hasTable('organization_invitations')) {
+            Schema::table('organization_invitations', function (Blueprint $table) {
+                if (! Schema::hasColumn('organization_invitations', 'accepted_user_id')) {
+                    $table->foreignId('accepted_user_id')
+                        ->nullable()
+                        ->after('invited_by_user_id')
+                        ->constrained('users')
+                        ->nullOnDelete();
+                }
+
+                $table->index(
+                    ['organization_id', 'email'],
+                    'organization_invitations_organization_email_index',
+                );
+                $table->index(
+                    ['organization_id', 'status', 'expires_at'],
+                    'organization_invitations_status_expires_index',
+                );
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        if (! Schema::hasTable('organization_invitations')) {
+            return;
+        }
+
+        Schema::table('organization_invitations', function (Blueprint $table) {
+            $table->dropIndex('organization_invitations_organization_email_index');
+            $table->dropIndex('organization_invitations_status_expires_index');
+
+            if (Schema::hasColumn('organization_invitations', 'accepted_user_id')) {
+                $table->dropConstrainedForeignId('accepted_user_id');
+            }
+        });
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_24_000001_grant_cash_open_permissions_to_sellers.php
+📏 Taille : 1.15 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (! app()->bound('cache')) {
+            return;
+        }
+
+        $seller = Role::query()->where('name', 'vendeur')->where('guard_name', 'web')->first();
+
+        if (! $seller) {
+            return;
+        }
+
+        $permissions = Permission::query()
+            ->whereIn('name', ['cash.open', 'cash.close'])
+            ->where('guard_name', 'web')
+            ->get();
+
+        if ($permissions->isNotEmpty()) {
+            $seller->givePermissionTo($permissions);
+        }
+    }
+
+    public function down(): void
+    {
+        $seller = Role::query()->where('name', 'vendeur')->where('guard_name', 'web')->first();
+
+        if (! $seller) {
+            return;
+        }
+
+        $permissions = Permission::query()
+            ->whereIn('name', ['cash.open', 'cash.close'])
+            ->where('guard_name', 'web')
+            ->get();
+
+        if ($permissions->isNotEmpty()) {
+            $seller->revokePermissionTo($permissions);
+        }
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_24_000002_set_default_organization_currency_to_cdf.php
+📏 Taille : 893 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('organizations', function (Blueprint $table) {
+            $table->string('currency', 10)->default('CDF')->change();
+        });
+
+        DB::table('organizations')
+            ->whereNull('currency')
+            ->update(['currency' => 'CDF']);
+
+        DB::table('organizations')
+            ->where('name', 'Organization par defaut')
+            ->where('currency', 'XAF')
+            ->update(['currency' => 'CDF']);
+    }
+
+    public function down(): void
+    {
+        Schema::table('organizations', function (Blueprint $table) {
+            $table->string('currency', 10)->default('XAF')->change();
+        });
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_29_000001_grant_role_specific_report_permissions.php
+📏 Taille : 2.18 KB
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        foreach (['sales.reports', 'cash.reports', 'stock.reports'] as $permissionName) {
+            Permission::findOrCreate($permissionName, 'web');
+        }
+
+        Role::findOrCreate('admin', 'web')->givePermissionTo(['sales.reports', 'cash.reports', 'stock.reports']);
+        Role::findOrCreate('gestionnaire_stock', 'web')->givePermissionTo(['stock.reports']);
+        Role::findOrCreate('vendeur', 'web')->givePermissionTo(['sales.reports']);
+        Role::findOrCreate('caissier', 'web')->givePermissionTo(['cash.reports']);
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    public function down(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        foreach ([
+            'admin' => ['sales.reports', 'cash.reports', 'stock.reports'],
+            'gestionnaire_stock' => ['stock.reports'],
+            'vendeur' => ['sales.reports'],
+            'caissier' => ['cash.reports'],
+        ] as $roleName => $permissionNames) {
+            $role = Role::where('name', $roleName)->where('guard_name', 'web')->first();
+
+            if (! $role) {
+                continue;
+            }
+
+            foreach ($permissionNames as $permissionName) {
+                $permission = Permission::where('name', $permissionName)->where('guard_name', 'web')->first();
+
+                if ($permission) {
+                    $role->revokePermissionTo($permission);
+                }
+            }
+        }
+
+        foreach (['sales.reports', 'cash.reports', 'stock.reports'] as $permissionName) {
+            $permission = Permission::where('name', $permissionName)->where('guard_name', 'web')->first();
+
+            if ($permission && ! in_array($permissionName, ['sales.reports', 'cash.reports'], true)) {
+                $permission->delete();
+            }
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_03_29_110157_grant_role_specific_report_permissions.php
+📏 Taille : 376 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        //
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        //
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_04_01_120033_add_base_currency_to_organizations_table.php
+📏 Taille : 874 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('organizations', function (Blueprint $table) {
+            $table->string('base_currency', 10)->nullable()->after('currency');
+        });
+
+        DB::table('organizations')->update([
+            'base_currency' => DB::raw('currency'),
+        ]);
+
+        Schema::table('organizations', function (Blueprint $table) {
+            $table->string('base_currency', 10)->default('CDF')->nullable(false)->change();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('organizations', function (Blueprint $table) {
+            $table->dropColumn('base_currency');
+        });
+    }
+};
+
+
+--------------------------------------------------------------------------------
+📄 FICHIER : 2026_04_01_162104_make_category_slug_unique_per_organization.php
+📏 Taille : 681 B
+--------------------------------------------------------------------------------
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('categories', function (Blueprint $table) {
+            $table->dropUnique('categories_slug_unique');
+            $table->unique(['organization_id', 'slug'], 'categories_organization_slug_unique');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('categories', function (Blueprint $table) {
+            $table->dropUnique('categories_organization_slug_unique');
+            $table->unique('slug');
+        });
+    }
+};
+
+
+================================================================================
+FIN DE L'EXTRACTION
+Total : 27 fichiers traités
+Taille totale : 39.1 KB
+================================================================================
