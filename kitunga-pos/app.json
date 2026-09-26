@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "kitunga-pos",
+    "slug": "kitunga-pos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gmkdev.kitungapos"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gmkdev.kitungapos"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-localization",
+      "expo-status-bar",
+      "expo-image"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2c720261-8349-4103-ad46-3e267ebb120f"
+      }
+    }
+  }
+}
