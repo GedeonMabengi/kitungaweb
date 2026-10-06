@@ -1,7 +1,14 @@
 // App.tsx
-import 'react-native-gesture-handler'; // ⚠️ DOIT ÊTRE EN PREMIER
+import 'react-native-gesture-handler';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import {
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
@@ -54,14 +61,20 @@ export default function App() {
     return (
         <SafeAreaProvider>
             <StatusBar style="dark" />
-            <NavigationContainer>
-                <RootNavigator />
-            </NavigationContainer>
+            <KeyboardAvoidingView
+                style={styles.flex}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                <NavigationContainer>
+                    <RootNavigator />
+                </NavigationContainer>
+            </KeyboardAvoidingView>
         </SafeAreaProvider>
     );
 }
 
 const styles = StyleSheet.create({
+    flex: { flex: 1 },
     center: {
         flex: 1,
         alignItems: 'center',

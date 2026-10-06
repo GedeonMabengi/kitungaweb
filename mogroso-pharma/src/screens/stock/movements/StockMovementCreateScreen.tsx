@@ -1,6 +1,7 @@
 // src/screens/stock/movements/StockMovementCreateScreen.tsx
 import * as React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../../components/layout/KeyboardAwareScrollView';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -106,10 +107,7 @@ export default function StockMovementCreateScreen() {
     };
 
     return (
-        <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-        >
+        <KeyboardAwareScrollView contentContainerStyle={styles.content}>
             {globalErrors.length > 0 ? (
                 <AlertError errors={globalErrors} title="Erreur" />
             ) : null}
@@ -230,7 +228,7 @@ export default function StockMovementCreateScreen() {
                     Enregistrer
                 </Button>
             </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
     );
 }
 

@@ -1,12 +1,6 @@
 // src/screens/articles/ArticleForm.tsx
 import * as React from 'react';
-import {
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    View,
-} from 'react-native';
+npx expo install @react-navigation/elements
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -153,10 +147,7 @@ export default function ArticleForm({ mode, article }: ArticleFormProps) {
     };
 
     return (
-        <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-        >
+        <KeyboardAwareScrollView contentContainerStyle={styles.content}>
             {globalErrors.length > 0 ? (
                 <AlertError errors={globalErrors} title="Erreur" />
             ) : null}
@@ -337,7 +328,7 @@ export default function ArticleForm({ mode, article }: ArticleFormProps) {
                     {isEditing ? 'Mettre à jour' : 'Créer l’article'}
                 </Button>
             </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
     );
 }
 
