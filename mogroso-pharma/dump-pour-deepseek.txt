@@ -1,0 +1,2608 @@
+================================================================================
+DUMP DU PROJET mogroso-pharma
+Généré le : 2026-10-06T23:30:23.426Z
+Dossier racine : D:\code\Kitungaweb\mogroso-pharma
+Nombre de fichiers : 16
+================================================================================
+
+
+################################################################################
+# FICHIER : src/screens/sales/PosScreen.tsx
+################################################################################
+
+// src/screens/sales/PosScreen.tsx
+import * as React from 'react';
+import {
+    Alert,
+    FlatList,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+    CheckCircle2,
+    CreditCard,
+    Minus,
+    Package,
+    Plus,
+    Printer,
+    ShoppingCart,
+    Trash2,
+    Wallet,
+} from 'lucide-react-native';
+
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
+import { Skeleton } from '../../components/ui/Skeleton';
+import {
+    BottomSheet,
+    BottomSheetBody,
+    BottomSheetHeader,
+    BottomSheetTitle,
+} from '../../components/ui/BottomSheet';
+import { FormField } from '../../components/forms/FormField';
+import AlertError from '../../components/forms/AlertError';
+import { useArticles } from '../../hooks/useArticles';
+import { useCategories } from '../../hooks/useCategories';
+import { useCashDashboard } from '../../hooks/useCash';
+import { useOrganizationCurrency } from '../../hooks/useOrganizationCurrency';
+import { useOrganizationStore } from '../../store/organization.store';
+import { useSessionStore } from '../../store/session.store';
+import { SalesRepo } from '../../data/repositories/sales.repo';
+import {
+    resolveUnitPrice,
+    type PaymentMethod,
+    type QuantityType,
+} from '../../data/types/sale';
+import type { ArticleRow } from '../../data/types/article';
+import { PrinterService } from '../../lib/printerNative';
+import { SystemPrinterService } from '../../lib/systemPrinter';
+import type { RootStackParamList } from '../../navigation/types';
+
+const P = {
+    bg: '#FAFAFA',
+    fg: '#18181B',
+    muted: '#71717A',
+    border: '#E4E4E7',
+    card: '#FFFFFF',
+    dark: '#0F172A',
+    emerald: '#047857',
+    rose: '#B91C1C',
+    amber: '#B45309',
+};
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+type CartLine = {
+    article_id: number;
+    article: ArticleRow;
+    quantity: number;
+    quantity_type: QuantityType;
+    unit_price: number;
+};
+
+type SaleSuccess = {
+    sale_id: number;
+    reference: string;
+    total: number;
+};
+
+export default function PosScreen() {
+    const navigation = useNavigation<Nav>();
+    const { width } = useWindowDimensions();
+    const numColumns = width >= 700 ? 2 : 1;
+
+    const orgId = useOrganizationStore((s) => s.organization?.id ?? null);
+    const orgName =
+        useOrganizationStore((s) => s.organization?.name ?? 'Ma Boutique');
+    const userId = useSessionStore((s) => s.user?.id ?? 1);
+    const { formatCurrency } = useOrganizationCurrency();
+
+    // Caisse ouverte ?
+    const {
+        openRegister,
+        loading: loadingRegister,
+        refresh: refreshRegister,
+    } = useCashDashboard();
+
+    // Catalogue
+    const [search, setSearch] = React.useState('');
+    const [categoryId, setCategoryId] = React.useState<number | null>(null);
+    const { data: categories } = useCategories();
+    const { data: articles, loading: loadingArticles } = useArticles({
+        search,
+        category_id: categoryId,
+        per_page: 200,
+        page: 1,
+    });
+
+    // Panier
+    const [cart, setCart] = React.useState<CartLine[]>([]);
+    const [cartOpen, setCartOpen] = React.useState(false);
+
+    // Champs de paiement
+    const [customerName, setCustomerName] = React.useState('');
+    const [customerPhone, setCustomerPhone] = React.useState('');
+    const [paymentMethod, setPaymentMethod] =
+        React.useState<PaymentMethod>('CASH');
+    const [discount, setDiscount] = React.useState('');
+    const [amountPaid, setAmountPaid] = React.useState('');
+    const [amountPaidEdited, setAmountPaidEdited] = React.useState(false);
+
+    const [processing, setProcessing] = React.useState(false);
+    const [errors, setErrors] = React.useState<string[]>([]);
+
+    // Écran de succès post-vente
+    const [saleSuccess, setSaleSuccess] = React.useState<SaleSuccess | null>(null);
+    const [printing, setPrinting] = React.useState(false);
+    const [printError, setPrintError] = React.useState<string | null>(null);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            refreshRegister();
+        }, [refreshRegister]),
+    );
+
+    // Totaux
+    const subtotal = React.useMemo(
+        () => cart.reduce((sum, l) => sum + l.quantity * l.unit_price, 0),
+        [cart],
+    );
+
+    const total = React.useMemo(
+        () => Math.max(0, subtotal - Number(discount || 0)),
+        [subtotal, discount],
+    );
+
+    React.useEffect(() => {
+        if (!amountPaidEdited) {
+            setAmountPaid(total > 0 ? String(total) : '');
+        }
+    }, [amountPaidEdited, total]);
+
+    const change = React.useMemo(
+        () => Math.max(0, Number(amountPaid || 0) - total),
+        [amountPaid, total],
+    );
+
+    const cartCount = React.useMemo(
+        () => cart.reduce((sum, l) => sum + l.quantity, 0),
+        [cart],
+    );
+
+    // -------------------------------------------------------------
+    // Actions panier
+    // -------------------------------------------------------------
+    const addToCart = (article: ArticleRow, qtyType?: QuantityType) => {
+        const quantityType: QuantityType =
+            qtyType ?? (article.unit_type === 'PACK' ? 'PACK' : 'UNIT');
+        const price = resolveUnitPrice(article, quantityType);
+
+        setCart((current) => {
+            const idx = current.findIndex(
+                (l) =>
+                    l.article_id === article.id &&
+                    l.quantity_type === quantityType,
+            );
+            if (idx >= 0) {
+                const updated = [...current];
+                updated[idx] = {
+                    ...updated[idx],
+                    quantity: updated[idx].quantity + 1,
+                };
+                return updated;
+            }
+            return [
+                ...current,
+                {
+                    article_id: article.id,
+                    article,
+                    quantity: 1,
+                    quantity_type: quantityType,
+                    unit_price: price,
+                },
+            ];
+        });
+    };
+
+    const updateQty = (index: number, delta: number) => {
+        setCart((current) => {
+            const updated = [...current];
+            const next = updated[index].quantity + delta;
+            if (next <= 0) {
+                return updated.filter((_, i) => i !== index);
+            }
+            updated[index] = { ...updated[index], quantity: next };
+            return updated;
+        });
+    };
+
+    const removeLine = (index: number) => {
+        setCart((current) => current.filter((_, i) => i !== index));
+    };
+
+    const clearCart = () => {
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        setDiscount('');
+        setAmountPaid('');
+        setAmountPaidEdited(false);
+        setPaymentMethod('CASH');
+        setErrors([]);
+    };
+
+    // -------------------------------------------------------------
+    // Validation de la vente
+    // -------------------------------------------------------------
+    const submitSale = async () => {
+        setErrors([]);
+        if (!openRegister) {
+            setErrors(['Aucune caisse ouverte.']);
+            return;
+        }
+        if (cart.length === 0) {
+            setErrors(['Le panier est vide.']);
+            return;
+        }
+        if (Number(amountPaid || 0) < total) {
+            setErrors(['Le montant payé est insuffisant.']);
+            return;
+        }
+
+        setProcessing(true);
+        try {
+            const res = await SalesRepo.create({
+                organization_id: orgId,
+                user_id: userId,
+                cash_register_id: openRegister.id,
+                items: cart.map((l) => ({
+                    article_id: l.article_id,
+                    quantity: l.quantity,
+                    quantity_type: l.quantity_type,
+                    unit_price: l.unit_price,
+                })),
+                payment_method: paymentMethod,
+                amount_paid: Number(amountPaid || 0),
+                discount: Number(discount || 0),
+                customer_name: customerName.trim() || null,
+                customer_phone: customerPhone.trim() || null,
+                notes: null,
+            });
+
+            // Affiche l'écran de succès
+            setSaleSuccess({
+                sale_id: res.sale_id,
+                reference: res.reference,
+                total,
+            });
+            setCartOpen(false);
+        } catch (e) {
+            setErrors([
+                e instanceof Error ? e.message : 'Erreur lors de la vente.',
+            ]);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // -------------------------------------------------------------
+    // Impression du reçu
+    // -------------------------------------------------------------
+    const printReceipt = async (mode: 'bluetooth' | 'system') => {
+        if (!saleSuccess || printing) return;
+        setPrintError(null);
+        setPrinting(true);
+        try {
+            const { sale, items } = await SalesRepo.find(saleSuccess.sale_id);
+            if (!sale) {
+                throw new Error('Vente introuvable pour impression.');
+            }
+
+            if (mode === 'system') {
+                await SystemPrinterService.printReceipt(
+                    sale,
+                    items,
+                    orgName,
+                    formatCurrency,
+                );
+            } else {
+                const result = await PrinterService.printReceipt(
+                    sale,
+                    items,
+                    orgName,
+                    formatCurrency,
+                );
+                if (!result.success) {
+                    setPrintError(result.error ?? 'Impression impossible.');
+                }
+            }
+        } catch (e) {
+            setPrintError(
+                e instanceof Error ? e.message : 'Erreur d’impression.',
+            );
+        } finally {
+            setPrinting(false);
+        }
+    };
+
+    const handlePrint = () => {
+        if (!saleSuccess || printing) return;
+        Alert.alert('Mode d’impression', 'Choisis le mode à utiliser.', [
+            {
+                text: 'Bluetooth POS',
+                onPress: () => void printReceipt('bluetooth'),
+            },
+            {
+                text: 'Impression système',
+                onPress: () => void printReceipt('system'),
+            },
+            { text: 'Annuler', style: 'cancel' },
+        ]);
+    };
+
+    const closeSuccess = () => {
+        setSaleSuccess(null);
+        setPrintError(null);
+        clearCart();
+    };
+
+    // -------------------------------------------------------------
+    // Rendu
+    // -------------------------------------------------------------
+    if (loadingRegister) {
+        return (
+            <View style={styles.center}>
+                <Skeleton height={200} borderRadius={12} />
+            </View>
+        );
+    }
+
+    if (!openRegister) {
+        return (
+            <SafeAreaView style={styles.safe} edges={['bottom']}>
+                <View style={styles.blockedWrap}>
+                    <View style={styles.blockedIcon}>
+                        <ShoppingCart size={32} color={P.amber} />
+                    </View>
+                    <Text style={styles.blockedTitle}>
+                        Ouvre une caisse avant de vendre
+                    </Text>
+                    <Text style={styles.blockedText}>
+                        Le point de vente reste bloqué tant qu’aucune caisse
+                        n’est ouverte.
+                    </Text>
+                    <Button
+                        onPress={() =>
+                            navigation.navigate('Main', {
+                                screen: 'Cash.Dashboard',
+                            } as any)
+                        }
+                        style={{ marginTop: 16 }}
+                    >
+                        Aller à la caisse
+                    </Button>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    return (
+        <SafeAreaView style={styles.safe} edges={['bottom']}>
+            {/* Header caisse */}
+            <View style={styles.topBar}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.topLabel}>Caisse active</Text>
+                    <Text style={styles.topValue}>
+                        {formatCurrency(openRegister.opening_balance)}
+                    </Text>
+                </View>
+                <Badge variant="default">Jour {openRegister.date}</Badge>
+            </View>
+
+            {/* Filtres */}
+            <View style={styles.filters}>
+                <Input
+                    placeholder="Nom, SKU, code-barres…"
+                    value={search}
+                    onChangeText={setSearch}
+                    autoCapitalize="none"
+                />
+                <Select
+                    value={categoryId}
+                    onValueChange={(v) => setCategoryId(v)}
+                    placeholder="Toutes catégories"
+                    title="Catégorie"
+                    options={[
+                        { label: 'Toutes catégories', value: null as any },
+                        ...categories.map((c) => ({
+                            label: c.name,
+                            value: c.id,
+                        })),
+                    ]}
+                />
+            </View>
+
+            {/* Grille produits */}
+            <FlatList
+                data={articles}
+                keyExtractor={(item) => String(item.id)}
+                numColumns={numColumns}
+                key={numColumns}
+                contentContainerStyle={styles.listContent}
+                columnWrapperStyle={
+                    numColumns > 1 ? { gap: 10 } : undefined
+                }
+                renderItem={({ item }) => (
+                    <ProductCard
+                        article={item}
+                        formatCurrency={formatCurrency}
+                        onAdd={(qt) => addToCart(item, qt)}
+                    />
+                )}
+                ListEmptyComponent={
+                    loadingArticles ? (
+                        <View style={{ gap: 10, padding: 16 }}>
+                            {[1, 2, 3].map((i) => (
+                                <Skeleton key={i} height={120} borderRadius={12} />
+                            ))}
+                        </View>
+                    ) : (
+                        <View style={styles.empty}>
+                            <Package size={32} color={P.muted} />
+                            <Text style={styles.muted}>
+                                Aucun article trouvé.
+                            </Text>
+                        </View>
+                    )
+                }
+            />
+
+            {/* Barre panier flottante */}
+            {cartCount > 0 ? (
+                <Pressable
+                    onPress={() => setCartOpen(true)}
+                    style={({ pressed }) => [
+                        styles.cartBar,
+                        pressed && { opacity: 0.95 },
+                    ]}
+                >
+                    <View style={styles.cartBarLeft}>
+                        <View style={styles.cartBarIcon}>
+                            <ShoppingCart size={18} color="#FFFFFF" />
+                        </View>
+                        <View>
+                            <Text style={styles.cartBarCount}>
+                                {cartCount} article{cartCount > 1 ? 's' : ''}
+                            </Text>
+                            <Text style={styles.cartBarLabel}>Voir le panier</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.cartBarTotal}>
+                        {formatCurrency(total)}
+                    </Text>
+                </Pressable>
+            ) : null}
+
+            {/* BottomSheet panier */}
+            {cartOpen ? (
+                <BottomSheet
+                    visible
+                    onClose={() => setCartOpen(false)}
+                    maxHeightRatio={0.92}
+                >
+                    <BottomSheetHeader>
+                        <BottomSheetTitle>
+                            Panier · {cartCount} article{cartCount > 1 ? 's' : ''}
+                        </BottomSheetTitle>
+                    </BottomSheetHeader>
+                    <BottomSheetBody scrollable>
+                        {errors.length > 0 ? <AlertError errors={errors} /> : null}
+
+                        <View style={{ gap: 8 }}>
+                            {cart.map((line, index) => (
+                                <View
+                                    key={`${line.article_id}-${line.quantity_type}`}
+                                    style={styles.line}
+                                >
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                        <Text
+                                            style={styles.lineTitle}
+                                            numberOfLines={1}
+                                        >
+                                            {line.article.name}
+                                        </Text>
+                                        <Text style={styles.lineMeta}>
+                                            {line.quantity_type} ·{' '}
+                                            {formatCurrency(line.unit_price)}
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.qtyGroup}>
+                                        <Pressable
+                                            onPress={() => updateQty(index, -1)}
+                                            style={styles.qtyBtn}
+                                        >
+                                            <Minus size={14} color={P.fg} />
+                                        </Pressable>
+                                        <Text style={styles.qtyText}>
+                                            {line.quantity}
+                                        </Text>
+                                        <Pressable
+                                            onPress={() => updateQty(index, 1)}
+                                            style={styles.qtyBtn}
+                                        >
+                                            <Plus size={14} color={P.fg} />
+                                        </Pressable>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={() => removeLine(index)}
+                                        style={styles.removeBtn}
+                                    >
+                                        <Trash2 size={14} color={P.rose} />
+                                    </Pressable>
+                                </View>
+                            ))}
+                        </View>
+
+                        <FormField label="Client (optionnel)">
+                            <Input
+                                value={customerName}
+                                onChangeText={setCustomerName}
+                                placeholder="Nom du client"
+                            />
+                        </FormField>
+                        <FormField label="Téléphone (optionnel)">
+                            <Input
+                                value={customerPhone}
+                                onChangeText={setCustomerPhone}
+                                placeholder="+243…"
+                                keyboardType="phone-pad"
+                            />
+                        </FormField>
+
+                        <FormField label="Moyen de paiement">
+                            <Select
+                                value={paymentMethod}
+                                onValueChange={(v) =>
+                                    setPaymentMethod(v as PaymentMethod)
+                                }
+                                options={[
+                                    { label: 'Espèces', value: 'CASH' },
+                                    { label: 'Carte', value: 'CARD' },
+                                    { label: 'Mobile Money', value: 'MOBILE' },
+                                    { label: 'Crédit', value: 'CREDIT' },
+                                    { label: 'Autre', value: 'OTHER' },
+                                ]}
+                            />
+                        </FormField>
+
+                        <FormField label="Remise">
+                            <Input
+                                value={discount}
+                                onChangeText={setDiscount}
+                                keyboardType="numeric"
+                                placeholder="0"
+                            />
+                        </FormField>
+
+                        <FormField label="Montant payé (modifiable)">
+                            <Input
+                                value={amountPaid}
+                                onChangeText={(value) => {
+                                    setAmountPaidEdited(true);
+                                    setAmountPaid(value);
+                                }}
+                                keyboardType="numeric"
+                                placeholder="0"
+                            />
+                        </FormField>
+
+                        <View style={styles.totalsBox}>
+                            <View style={styles.totalRow}>
+                                <Text style={styles.totalLabel}>Sous-total</Text>
+                                <Text style={styles.totalValue}>
+                                    {formatCurrency(subtotal)}
+                                </Text>
+                            </View>
+                            <View style={styles.totalRow}>
+                                <Text style={styles.totalLabel}>Remise</Text>
+                                <Text style={styles.totalValue}>
+                                    {formatCurrency(Number(discount || 0))}
+                                </Text>
+                            </View>
+                            <View style={styles.totalRow}>
+                                <Text style={styles.totalLabel}>Rendu</Text>
+                                <Text style={styles.totalValue}>
+                                    {formatCurrency(change)}
+                                </Text>
+                            </View>
+                            <View style={[styles.totalRow, styles.totalRowBig]}>
+                                <Text style={styles.totalLabelBig}>TOTAL</Text>
+                                <Text style={styles.totalValueBig}>
+                                    {formatCurrency(total)}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <View
+                            style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}
+                        >
+                            <Button
+                                variant="outline"
+                                onPress={clearCart}
+                                style={{ flex: 1 }}
+                            >
+                                Vider
+                            </Button>
+                            <Button
+                                onPress={submitSale}
+                                loading={processing}
+                                leftIcon={
+                                    paymentMethod === 'CASH' ? (
+                                        <Wallet size={16} color="#FAFAFA" />
+                                    ) : (
+                                        <CreditCard size={16} color="#FAFAFA" />
+                                    )
+                                }
+                                style={{ flex: 2 }}
+                            >
+                                Valider la vente
+                            </Button>
+                        </View>
+                    </BottomSheetBody>
+                </BottomSheet>
+            ) : null}
+
+            {/* MODAL DE SUCCÈS + IMPRESSION */}
+            <Modal
+                visible={!!saleSuccess}
+                transparent
+                animationType="fade"
+                onRequestClose={closeSuccess}
+                statusBarTranslucent
+            >
+                <View style={styles.successOverlay}>
+                    <View style={styles.successCard}>
+                        <View style={styles.successIconWrap}>
+                            <CheckCircle2 size={48} color={P.emerald} />
+                        </View>
+
+                        <Text style={styles.successTitle}>Vente enregistrée</Text>
+                        <Text style={styles.successRef}>
+                            {saleSuccess?.reference}
+                        </Text>
+                        <Text style={styles.successTotal}>
+                            {saleSuccess
+                                ? formatCurrency(saleSuccess.total)
+                                : ''}
+                        </Text>
+
+                        {printError ? (
+                            <View style={{ marginTop: 12, width: '100%' }}>
+                                <AlertError
+                                    errors={[printError]}
+                                    title="Impression"
+                                />
+                            </View>
+                        ) : null}
+
+                        <View style={styles.successActions}>
+                            <Button
+                                variant="outline"
+                                onPress={closeSuccess}
+                                style={{ flex: 1 }}
+                            >
+                                Fermer
+                            </Button>
+                            <Button
+                                onPress={handlePrint}
+                                loading={printing}
+                                leftIcon={<Printer size={16} color="#FAFAFA" />}
+                                style={{ flex: 2 }}
+                            >
+                                Choisir le mode d’impression
+                            </Button>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView>
+    );
+}
+
+// -------------------------------------------------------------
+// Carte produit
+// -------------------------------------------------------------
+function ProductCard({
+    article,
+    formatCurrency,
+    onAdd,
+}: {
+    article: ArticleRow;
+    formatCurrency: (n: number) => string;
+    onAdd: (qt: QuantityType) => void;
+}) {
+    const stock = article.current_stock;
+    const low = stock <= article.alert_threshold;
+    const out = stock <= 0;
+
+    const showUnitBtn =
+        article.unit_type === 'PACK' && article.allow_unit_sale === 1;
+
+    return (
+        <View style={[styles.product, { flex: 1 }]}>
+            <View style={styles.productTop}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.productTitle} numberOfLines={1}>
+                        {article.name}
+                    </Text>
+                    <Text style={styles.productSub} numberOfLines={1}>
+                        {article.category_name ?? 'Sans catégorie'}
+                    </Text>
+                </View>
+                <Badge
+                    variant={out ? 'destructive' : low ? 'secondary' : 'outline'}
+                >
+                    {out ? 'Rupture' : `Stock ${stock}`}
+                </Badge>
+            </View>
+
+            <View style={styles.productPrice}>
+                <Text style={styles.productPriceLabel}>Prix</Text>
+                <Text style={styles.productPriceValue}>
+                    {formatCurrency(article.price)}
+                </Text>
+                {showUnitBtn ? (
+                    <Text style={styles.productUnitPrice}>
+                        Unité :{' '}
+                        {formatCurrency(resolveUnitPrice(article, 'UNIT'))}
+                    </Text>
+                ) : null}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+                <Button
+                    size="sm"
+                    disabled={out}
+                    onPress={() =>
+                        onAdd(article.unit_type === 'PACK' ? 'PACK' : 'UNIT')
+                    }
+                    style={{ flex: 1 }}
+                >
+                    {article.unit_type === 'PACK' ? 'Ajouter pack' : 'Ajouter'}
+                </Button>
+                {showUnitBtn ? (
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={out}
+                        onPress={() => onAdd('UNIT')}
+                        style={{ flex: 1 }}
+                    >
+                        Unité
+                    </Button>
+                ) : null}
+            </View>
+        </View>
+    );
+}
+
+// -------------------------------------------------------------
+// Styles
+// -------------------------------------------------------------
+const styles = StyleSheet.create({
+    safe: { flex: 1, backgroundColor: P.bg },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+    topBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: P.card,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: P.border,
+    },
+    topLabel: {
+        fontSize: 11,
+        color: P.muted,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    topValue: { fontSize: 18, fontWeight: '800', color: P.fg, marginTop: 2 },
+
+    filters: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 8,
+        backgroundColor: P.card,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: P.border,
+    },
+
+    listContent: { padding: 16, gap: 10, paddingBottom: 100 },
+
+    product: {
+        backgroundColor: P.card,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: P.border,
+        padding: 14,
+        gap: 10,
+    },
+    productTop: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 10,
+    },
+    productTitle: { fontSize: 15, fontWeight: '700', color: P.fg },
+    productSub: { fontSize: 12, color: P.muted, marginTop: 2 },
+    productPrice: {
+        backgroundColor: '#F9FAFB',
+        padding: 10,
+        borderRadius: 8,
+    },
+    productPriceLabel: {
+        fontSize: 11,
+        color: P.muted,
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+    },
+    productPriceValue: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: P.fg,
+        marginTop: 2,
+    },
+    productUnitPrice: { fontSize: 12, color: P.muted, marginTop: 2 },
+
+    // Blocage
+    blockedWrap: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        gap: 8,
+    },
+    blockedIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        backgroundColor: '#FEF3C7',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 10,
+    },
+    blockedTitle: { fontSize: 22, fontWeight: '800', color: P.fg },
+    blockedText: { fontSize: 14, color: P.muted, textAlign: 'center' },
+
+    // Barre panier
+    cartBar: {
+        position: 'absolute',
+        bottom: 16,
+        left: 16,
+        right: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        backgroundColor: P.dark,
+        borderRadius: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    cartBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    cartBarIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cartBarCount: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+    cartBarLabel: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+    cartBarTotal: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+
+    // Lignes panier
+    line: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        padding: 10,
+        borderRadius: 10,
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: P.border,
+    },
+    lineTitle: { fontSize: 14, fontWeight: '600', color: P.fg },
+    lineMeta: { fontSize: 12, color: P.muted, marginTop: 2 },
+    qtyGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    qtyBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: P.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    qtyText: {
+        minWidth: 24,
+        textAlign: 'center',
+        fontWeight: '700',
+        color: P.fg,
+    },
+    removeBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Totaux
+    totalsBox: {
+        marginTop: 8,
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: P.dark,
+        gap: 8,
+    },
+    totalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    totalLabel: { color: '#CBD5E1', fontSize: 13 },
+    totalValue: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+    totalRowBig: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.15)',
+        paddingTop: 10,
+        marginTop: 4,
+    },
+    totalLabelBig: {
+        color: '#CBD5E1',
+        fontSize: 12,
+        letterSpacing: 1.5,
+        fontWeight: '700',
+    },
+    totalValueBig: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+
+    empty: { padding: 40, alignItems: 'center', gap: 12 },
+    muted: { color: P.muted, fontSize: 14 },
+
+    // Modal succès
+    successOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    successCard: {
+        width: '100%',
+        maxWidth: 420,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 24,
+        alignItems: 'center',
+        gap: 6,
+    },
+    successIconWrap: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: '#ECFDF5',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    successTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: P.fg,
+    },
+    successRef: {
+        fontSize: 14,
+        color: P.muted,
+        marginTop: 2,
+    },
+    successTotal: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: P.fg,
+        marginTop: 8,
+    },
+    successActions: {
+        flexDirection: 'row',
+        gap: 8,
+        width: '100%',
+        marginTop: 20,
+    },
+});
+
+################################################################################
+# FICHIER : src/screens/sales/SaleShowScreen.tsx
+################################################################################
+
+// src/screens/sales/SaleShowScreen.tsx
+import * as React from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ban, Printer } from 'lucide-react-native';
+
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Card, CardContent } from '../../components/ui/Card';
+import { Separator } from '../../components/ui/Separator';
+import { useSaleDetail } from '../../hooks/useSales';
+import { useOrganizationCurrency } from '../../hooks/useOrganizationCurrency';
+import { useOrganizationStore } from '../../store/organization.store';
+import { SalesRepo } from '../../data/repositories/sales.repo';
+import {
+    PAYMENT_METHOD_LABELS,
+    PAYMENT_STATUS_LABELS,
+    type PaymentStatus,
+} from '../../data/types/sale';
+import { PrinterService } from '../../lib/printerNative';
+import { SystemPrinterService } from '../../lib/systemPrinter';
+import { useAuthorization } from '../../lib/authorization';
+import type { RootStackParamList } from '../../navigation/types';
+
+const P = {
+    bg: '#FAFAFA',
+    fg: '#18181B',
+    muted: '#71717A',
+    border: '#E4E4E7',
+    card: '#FFFFFF',
+    emerald: '#047857',
+};
+
+type Route = RouteProp<RootStackParamList, 'Sales.Show'>;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+function statusVariant(
+    status: PaymentStatus,
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+    if (status === 'PAID') return 'default';
+    if (status === 'CANCELLED') return 'destructive';
+    if (status === 'PENDING') return 'secondary';
+    return 'outline';
+}
+
+export default function SaleShowScreen() {
+    const { id } = useRoute<Route>().params;
+    const navigation = useNavigation<Nav>();
+    const { formatCurrency } = useOrganizationCurrency();
+    const { hasPermission } = useAuthorization();
+
+    const { sale, items, loading, refresh } = useSaleDetail(id);
+
+    const canCancel =
+        hasPermission('sales.edit') || hasPermission('sales.manage');
+
+    const organizationName = useOrganizationStore(
+        (state) => state.organization?.name ?? 'Ma Boutique',
+    );
+
+    const handlePrint = async (mode: 'bluetooth' | 'system') => {
+        if (!sale) return;
+        try {
+            if (mode === 'system') {
+                await SystemPrinterService.printReceipt(
+                    sale,
+                    items,
+                    organizationName,
+                    formatCurrency,
+                );
+            } else {
+                const result = await PrinterService.printReceipt(
+                    sale,
+                    items,
+                    organizationName,
+                    formatCurrency,
+                );
+                if (!result.success) {
+                    throw new Error(result.error ?? 'Impression impossible.');
+                }
+            }
+            Alert.alert('Impression', 'Le reçu a été envoyé.');
+        } catch (error) {
+            Alert.alert(
+                'Impression impossible',
+                error instanceof Error ? error.message : 'Erreur d’impression.',
+            );
+        }
+    };
+
+    const handleCancel = () => {
+        if (!sale) return;
+        Alert.alert(
+            'Annuler la vente',
+            `Confirmer l’annulation de ${sale.reference} ? Le stock sera restauré.`,
+            [
+                { text: 'Non', style: 'cancel' },
+                {
+                    text: 'Oui, annuler',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await SalesRepo.cancel(sale.id);
+                            refresh();
+                        } catch (e) {
+                            Alert.alert(
+                                'Erreur',
+                                e instanceof Error ? e.message : 'Erreur',
+                            );
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.center}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    if (!sale) {
+        return (
+            <View style={styles.center}>
+                <Text style={styles.muted}>Vente introuvable.</Text>
+            </View>
+        );
+    }
+
+    return (
+        <ScrollView contentContainerStyle={styles.content}>
+            <View style={{ gap: 8 }}>
+                <Badge variant="secondary">Vente</Badge>
+                <Text style={styles.h1}>{sale.reference}</Text>
+                <Text style={styles.muted}>
+                    {sale.user_name ?? '-'} · {formatDate(sale.created_at)}
+                </Text>
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <Button
+                        variant="outline"
+                        onPress={() => Alert.alert('Mode d’impression', 'Choisis le mode à utiliser.', [{ text: 'Bluetooth POS', onPress: () => void handlePrint('bluetooth') }, { text: 'Impression système', onPress: () => void handlePrint('system') }, { text: 'Annuler', style: 'cancel' }])}
+                        leftIcon={<Printer size={16} color="#18181B" />}
+                        style={{ flex: 1 }}
+                    >
+                        Imprimer
+                    </Button>
+                    {canCancel && sale.payment_status !== 'CANCELLED' ? (
+                        <Button
+                            variant="destructive"
+                            onPress={handleCancel}
+                            leftIcon={<Ban size={16} color="#FAFAFA" />}
+                            style={{ flex: 1 }}
+                        >
+                            Annuler
+                        </Button>
+                    ) : null}
+                </View>
+            </View>
+
+            {/* Stats */}
+            <View style={styles.statsGrid}>
+                <StatCard label="Total" value={formatCurrency(sale.total_amount)} />
+                <StatCard label="Payé" value={formatCurrency(sale.amount_paid)} />
+                <StatCard label="Rendu" value={formatCurrency(sale.change_amount)} />
+                <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>Statut</Text>
+                    <View style={{ marginTop: 8 }}>
+                        <Badge variant={statusVariant(sale.payment_status)}>
+                            {PAYMENT_STATUS_LABELS[sale.payment_status]}
+                        </Badge>
+                    </View>
+                </View>
+            </View>
+
+            {/* Infos générales */}
+            <Card>
+                <CardContent>
+                    <Text style={styles.sectionLabel}>Informations</Text>
+                    <Text style={styles.h2}>Détails de la vente</Text>
+
+                    <Separator style={{ marginVertical: 14 }} />
+
+                    <View style={styles.dl}>
+                        <Field label="Vendeur" value={sale.user_name ?? '-'} />
+                        <Field
+                            label="Paiement"
+                            value={PAYMENT_METHOD_LABELS[sale.payment_method]}
+                        />
+                        <Field
+                            label="Client"
+                            value={sale.customer_name || 'Non renseigné'}
+                        />
+                        <Field
+                            label="Téléphone"
+                            value={sale.customer_phone || '-'}
+                        />
+                        <Field
+                            label="Caisse"
+                            value={String(sale.cash_register_id ?? '-')}
+                        />
+                        <Field
+                            label="Articles"
+                            value={String(items.length)}
+                        />
+                    </View>
+                </CardContent>
+            </Card>
+
+            {/* Résumé financier */}
+            <Card>
+                <CardContent>
+                    <Text style={styles.h2}>Résumé financier</Text>
+                    <View style={{ marginTop: 12, gap: 8 }}>
+                        <Row label="Sous-total" value={formatCurrency(sale.subtotal)} />
+                        <Row label="Remise" value={formatCurrency(sale.discount)} />
+                        <Row label="Taxe" value={formatCurrency(sale.tax)} />
+                        <Separator style={{ marginVertical: 6 }} />
+                        <Row
+                            label="Total net"
+                            value={formatCurrency(sale.total_amount)}
+                            big
+                        />
+                    </View>
+                </CardContent>
+            </Card>
+
+            {/* Articles */}
+            <Card>
+                <CardContent>
+                    <Text style={styles.h2}>Articles vendus</Text>
+                    <View style={{ gap: 8, marginTop: 12 }}>
+                        {items.length === 0 ? (
+                            <View style={styles.emptyBox}>
+                                <Text style={styles.muted}>
+                                    Aucun article rattaché à cette vente.
+                                </Text>
+                            </View>
+                        ) : (
+                            items.map((it) => (
+                                <View key={it.id} style={styles.itemRow}>
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                        <Text style={styles.itemTitle} numberOfLines={1}>
+                                            {it.article_name ?? '-'}
+                                        </Text>
+                                        <Text style={styles.itemMeta}>
+                                            {it.quantity} {it.quantity_type} ·{' '}
+                                            {formatCurrency(it.unit_price)} / u.
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.itemTotal}>
+                                        {formatCurrency(it.subtotal)}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
+                    </View>
+                </CardContent>
+            </Card>
+        </ScrollView>
+    );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+    return (
+        <View style={styles.statCard}>
+            <Text style={styles.statLabel}>{label}</Text>
+            <Text style={styles.statValue} numberOfLines={1}>
+                {value}
+            </Text>
+        </View>
+    );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+    return (
+        <View style={styles.field}>
+            <Text style={styles.fieldLabel}>{label}</Text>
+            <Text style={styles.fieldValue} numberOfLines={2}>
+                {value}
+            </Text>
+        </View>
+    );
+}
+
+function Row({
+    label,
+    value,
+    big = false,
+}: {
+    label: string;
+    value: string;
+    big?: boolean;
+}) {
+    return (
+        <View style={styles.rowBetween}>
+            <Text style={[styles.rowLabel, big && styles.rowLabelBig]}>
+                {label}
+            </Text>
+            <Text style={[styles.rowValue, big && styles.rowValueBig]}>
+                {value}
+            </Text>
+        </View>
+    );
+}
+
+function formatDate(value?: string | null): string {
+    if (!value) return '-';
+    const d = new Date(value.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+const styles = StyleSheet.create({
+    center: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        backgroundColor: P.bg,
+    },
+    content: { padding: 16, gap: 16, backgroundColor: P.bg, paddingBottom: 40 },
+    h1: { fontSize: 22, fontWeight: '800', color: P.fg },
+    h2: { fontSize: 18, fontWeight: '700', color: P.fg },
+    muted: { fontSize: 13, color: P.muted },
+
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    statCard: {
+        width: '48%',
+        backgroundColor: P.card,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: P.border,
+        padding: 12,
+        gap: 4,
+    },
+    statLabel: { fontSize: 12, color: P.muted },
+    statValue: { fontSize: 16, fontWeight: '800', color: P.fg, marginTop: 4 },
+
+    sectionLabel: {
+        fontSize: 11,
+        color: P.muted,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    dl: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12 },
+    field: { width: '50%', paddingRight: 12 },
+    fieldLabel: { fontSize: 12, color: P.muted },
+    fieldValue: { fontSize: 14, fontWeight: '600', color: P.fg, marginTop: 2 },
+
+    rowBetween: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    rowLabel: { fontSize: 13, color: P.muted },
+    rowValue: { fontSize: 14, fontWeight: '600', color: P.fg },
+    rowLabelBig: { fontSize: 14, fontWeight: '700', color: P.fg },
+    rowValueBig: { fontSize: 20, fontWeight: '800', color: P.fg },
+
+    itemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        padding: 12,
+        borderRadius: 10,
+        backgroundColor: '#F9FAFB',
+        borderWidth: 1,
+        borderColor: P.border,
+    },
+    itemTitle: { fontSize: 14, fontWeight: '600', color: P.fg },
+    itemMeta: { fontSize: 12, color: P.muted, marginTop: 2 },
+    itemTotal: { fontSize: 14, fontWeight: '700', color: P.fg },
+
+    emptyBox: {
+        paddingVertical: 20,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: P.border,
+        alignItems: 'center',
+    },
+});
+
+################################################################################
+# FICHIER : src/screens/sales/SalesListScreen.tsx
+################################################################################
+
+// src/screens/sales/SalesListScreen.tsx
+import * as React from 'react';
+import {
+    FlatList,
+    Pressable,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Receipt } from 'lucide-react-native';
+
+import { Badge } from '../../components/ui/Badge';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { useSales } from '../../hooks/useSales';
+import { useOrganizationCurrency } from '../../hooks/useOrganizationCurrency';
+import {
+    PAYMENT_METHOD_LABELS,
+    PAYMENT_STATUS_LABELS,
+    type PaymentMethod,
+    type PaymentStatus,
+    type SaleRow,
+} from '../../data/types/sale';
+import type { RootStackParamList } from '../../navigation/types';
+
+const P = {
+    bg: '#FAFAFA',
+    fg: '#18181B',
+    muted: '#71717A',
+    border: '#E4E4E7',
+    card: '#FFFFFF',
+};
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+function statusVariant(
+    status: PaymentStatus,
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+    if (status === 'PAID') return 'default';
+    if (status === 'CANCELLED') return 'destructive';
+    if (status === 'PENDING') return 'secondary';
+    return 'outline';
+}
+
+export default function SalesListScreen() {
+    const navigation = useNavigation<Nav>();
+    const { formatCurrency } = useOrganizationCurrency();
+
+    const [search, setSearch] = React.useState('');
+    const [status, setStatus] = React.useState<PaymentStatus | ''>('');
+    const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod | ''>('');
+
+    const { data, total, loading, refreshing, setFilters, refresh } = useSales();
+
+    React.useEffect(() => {
+        const t = setTimeout(() => {
+            setFilters({
+                search,
+                status,
+                payment_method: paymentMethod,
+            });
+        }, 250);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search, status, paymentMethod]);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            refresh();
+        }, [refresh]),
+    );
+
+    return (
+        <SafeAreaView style={styles.safe} edges={['bottom']}>
+            <FlatList
+                data={data}
+                keyExtractor={(item) => String(item.id)}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+                }
+                contentContainerStyle={styles.content}
+                ListHeaderComponent={
+                    <View style={{ gap: 16 }}>
+                        <View style={styles.header}>
+                            <Badge variant="secondary">Ventes</Badge>
+                            <Text style={styles.h1}>Journal des ventes</Text>
+                            <Text style={styles.subtitle}>
+                                Historique, montants encaissés et modes de paiement.
+                            </Text>
+                        </View>
+
+                        <Input
+                            placeholder="Référence ou client…"
+                            value={search}
+                            onChangeText={setSearch}
+                            autoCapitalize="none"
+                        />
+
+                        <Select
+                            value={status}
+                            onValueChange={(v) => setStatus(v as PaymentStatus | '')}
+                            placeholder="Tous les statuts"
+                            title="Statut"
+                            options={[
+                                { label: 'Tous les statuts', value: '' },
+                                { label: 'Payée', value: 'PAID' },
+                                { label: 'En attente', value: 'PENDING' },
+                                { label: 'Partiel', value: 'PARTIAL' },
+                                { label: 'Annulée', value: 'CANCELLED' },
+                            ]}
+                        />
+
+                        <Select
+                            value={paymentMethod}
+                            onValueChange={(v) => setPaymentMethod(v as PaymentMethod | '')}
+                            placeholder="Tous les paiements"
+                            title="Paiement"
+                            options={[
+                                { label: 'Tous les paiements', value: '' },
+                                { label: 'Espèces', value: 'CASH' },
+                                { label: 'Carte', value: 'CARD' },
+                                { label: 'Mobile Money', value: 'MOBILE' },
+                                { label: 'Crédit', value: 'CREDIT' },
+                                { label: 'Autre', value: 'OTHER' },
+                            ]}
+                        />
+
+                        <Text style={styles.counter}>
+                            {total} vente{total > 1 ? 's' : ''}
+                        </Text>
+                    </View>
+                }
+                renderItem={({ item }) => (
+                    <SaleCard
+                        sale={item}
+                        formatCurrency={formatCurrency}
+                        onPress={() =>
+                            navigation.navigate('Sales.Show', { id: item.id })
+                        }
+                    />
+                )}
+                ListEmptyComponent={
+                    loading ? (
+                        <View style={{ gap: 10 }}>
+                            {[1, 2, 3].map((i) => (
+                                <Skeleton key={i} height={100} borderRadius={12} />
+                            ))}
+                        </View>
+                    ) : (
+                        <View style={styles.empty}>
+                            <Receipt size={32} color={P.muted} />
+                            <Text style={styles.muted}>
+                                Aucune vente ne correspond aux filtres.
+                            </Text>
+                        </View>
+                    )
+                }
+            />
+        </SafeAreaView>
+    );
+}
+
+function SaleCard({
+    sale,
+    formatCurrency,
+    onPress,
+}: {
+    sale: SaleRow;
+    formatCurrency: (n: number) => string;
+    onPress: () => void;
+}) {
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
+        >
+            <View style={styles.cardTop}>
+                <View style={styles.iconBox}>
+                    <Receipt size={18} color={P.fg} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                        {sale.reference}
+                    </Text>
+                    <Text style={styles.cardSub} numberOfLines={1}>
+                        {sale.customer_name || 'Client non renseigné'}
+                    </Text>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                        {sale.user_name ?? '-'} ·{' '}
+                        {PAYMENT_METHOD_LABELS[sale.payment_method]}
+                    </Text>
+                </View>
+            </View>
+
+            <View style={styles.cardBottom}>
+                <Badge variant={statusVariant(sale.payment_status)}>
+                    {PAYMENT_STATUS_LABELS[sale.payment_status]}
+                </Badge>
+                <Text style={styles.amount}>{formatCurrency(sale.total_amount)}</Text>
+            </View>
+        </Pressable>
+    );
+}
+
+const styles = StyleSheet.create({
+    safe: { flex: 1, backgroundColor: P.bg },
+    content: { padding: 16, gap: 12, paddingBottom: 40 },
+    header: { gap: 6 },
+    h1: { fontSize: 22, fontWeight: '800', color: P.fg },
+    subtitle: { fontSize: 14, color: P.muted },
+    counter: { fontSize: 13, color: P.muted, fontWeight: '500', paddingHorizontal: 4 },
+
+    card: {
+        backgroundColor: P.card,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: P.border,
+        padding: 14,
+        gap: 12,
+    },
+    cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    iconBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: '#F4F4F5',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cardTitle: { fontSize: 15, fontWeight: '700', color: P.fg },
+    cardSub: { fontSize: 13, color: P.fg, marginTop: 2 },
+    cardMeta: { fontSize: 12, color: P.muted, marginTop: 2 },
+    cardBottom: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    amount: { fontSize: 18, fontWeight: '800', color: P.fg },
+
+    empty: { padding: 40, alignItems: 'center', gap: 12 },
+    muted: { color: P.muted, fontSize: 14, textAlign: 'center' },
+});
+
+################################################################################
+# FICHIER : src/hooks/useSales.ts
+################################################################################
+
+// src/hooks/useSales.ts
+import { useCallback, useEffect, useState } from 'react';
+import { SalesRepo } from '../data/repositories/sales.repo';
+import type {
+    SaleFilters,
+    SaleItemRow,
+    SaleRow,
+} from '../data/types/sale';
+import { useOrganizationStore } from '../store/organization.store';
+
+// -------------------------------------------------------------
+// Liste
+// -------------------------------------------------------------
+export function useSales(initialFilters: SaleFilters = {}) {
+    const orgId = useOrganizationStore((s) => s.organization?.id ?? null);
+    const [filters, setFilters] = useState<SaleFilters>(initialFilters);
+    const [data, setData] = useState<SaleRow[]>([]);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const load = useCallback(
+        async (mode: 'initial' | 'refresh' = 'initial') => {
+            try {
+                if (mode === 'refresh') setRefreshing(true);
+                else setLoading(true);
+                const res = await SalesRepo.list(orgId, filters);
+                setData(res.data);
+                setTotal(res.total);
+            } finally {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        },
+        [orgId, filters],
+    );
+
+    useEffect(() => {
+        load('initial');
+    }, [load]);
+
+    const refresh = useCallback(() => load('refresh'), [load]);
+
+    return {
+        data,
+        total,
+        loading,
+        refreshing,
+        filters,
+        setFilters,
+        refresh,
+    };
+}
+
+// -------------------------------------------------------------
+// Détail
+// -------------------------------------------------------------
+export function useSaleDetail(saleId: number) {
+    const [sale, setSale] = useState<SaleRow | null>(null);
+    const [items, setItems] = useState<SaleItemRow[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            const res = await SalesRepo.find(saleId);
+            setSale(res.sale);
+            setItems(res.items);
+        } finally {
+            setLoading(false);
+        }
+    }, [saleId]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    return { sale, items, loading, refresh: load };
+}
+
+################################################################################
+# FICHIER : src/data/repositories/sales.repo.ts
+################################################################################
+
+// src/data/repositories/sales.repo.ts
+import { getDb } from '../db/client';
+import type {
+    NewSaleInput,
+    SaleFilters,
+    SaleItemRow,
+    SaleRow,
+} from '../types/sale';
+
+export const SalesRepo = {
+    // ---------------------------------------------------------
+    // LISTE
+    // ---------------------------------------------------------
+    async list(
+        orgId: number | null,
+        filters: SaleFilters = {},
+    ): Promise<{ data: SaleRow[]; total: number }> {
+        const db = await getDb();
+
+        const where: string[] = ['s.deleted_at IS NULL'];
+        const params: (string | number)[] = [];
+
+        if (orgId) {
+            where.push('s.organization_id = ?');
+            params.push(orgId);
+        }
+        if (filters.search) {
+            where.push('(s.reference LIKE ? OR s.customer_name LIKE ?)');
+            const q = `%${filters.search}%`;
+            params.push(q, q);
+        }
+        if (filters.status) {
+            where.push('s.payment_status = ?');
+            params.push(filters.status);
+        }
+        if (filters.payment_method) {
+            where.push('s.payment_method = ?');
+            params.push(filters.payment_method);
+        }
+
+        const whereSql = `WHERE ${where.join(' AND ')}`;
+
+        const totalRow = await db.getFirstAsync<{ total: number }>(
+            `SELECT COUNT(*) AS total FROM sales s ${whereSql}`,
+            params,
+        );
+
+        const rows = await db.getAllAsync<SaleRow>(
+            `SELECT s.*, u.name AS user_name
+             FROM sales s
+             LEFT JOIN users u ON u.id = s.user_id
+             ${whereSql}
+             ORDER BY s.created_at DESC, s.id DESC
+             LIMIT 100`,
+            params,
+        );
+
+        return { data: rows, total: totalRow?.total ?? 0 };
+    },
+
+    // ---------------------------------------------------------
+    // DÉTAIL
+    // ---------------------------------------------------------
+    async find(saleId: number): Promise<{
+        sale: SaleRow | null;
+        items: SaleItemRow[];
+    }> {
+        const db = await getDb();
+
+        const sale = await db.getFirstAsync<SaleRow>(
+            `SELECT s.*, u.name AS user_name
+             FROM sales s
+             LEFT JOIN users u ON u.id = s.user_id
+             WHERE s.id = ?`,
+            [saleId],
+        );
+
+        const items = await db.getAllAsync<SaleItemRow>(
+            `SELECT si.*,
+                    a.name AS article_name,
+                    a.sku  AS article_sku,
+                    a.units_per_pack AS article_units_per_pack
+             FROM sale_items si
+             LEFT JOIN articles a ON a.id = si.article_id
+             WHERE si.sale_id = ?
+             ORDER BY si.id ASC`,
+            [saleId],
+        );
+
+        return { sale, items };
+    },
+
+    // ---------------------------------------------------------
+    // CRÉATION (transactionnelle)
+    // ---------------------------------------------------------
+    async create(
+        input: NewSaleInput,
+    ): Promise<{ sale_id: number; reference: string }> {
+        const db = await getDb();
+
+        let saleId = 0;
+        let reference = '';
+
+        await db.withTransactionAsync(async () => {
+            // ---- 1) Générer la référence unique
+            await db.runAsync(
+                `INSERT OR IGNORE INTO sequences (key, last_value) VALUES ('sale', 0)`,
+            );
+            await db.runAsync(
+                `UPDATE sequences SET last_value = last_value + 1, updated_at = datetime('now')
+                 WHERE key = 'sale'`,
+            );
+            const seqRow = await db.getFirstAsync<{ last_value: number }>(
+                `SELECT last_value FROM sequences WHERE key = 'sale'`,
+            );
+            const seq = seqRow?.last_value ?? 1;
+
+            const now = new Date();
+            const y = now.getFullYear();
+            const mo = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            reference = `FAC-${y}${mo}${d}-${String(seq).padStart(4, '0')}`;
+
+            // ---- 2) Vérifier stocks + calculer subtotal
+            let subtotal = 0;
+            const lines: Array<{
+                article_id: number;
+                quantity: number;
+                quantity_type: 'PACK' | 'UNIT';
+                unit_price: number;
+                subtotal: number;
+                effective_qty: number;
+                stock_before: number;
+                stock_after: number;
+            }> = [];
+
+            for (const item of input.items) {
+                const art = await db.getFirstAsync<{
+                    current_stock: number;
+                    units_per_pack: number | null;
+                    name: string;
+                }>(
+                    `SELECT current_stock, units_per_pack, name
+                     FROM articles WHERE id = ? AND deleted_at IS NULL`,
+                    [item.article_id],
+                );
+                if (!art) {
+                    throw new Error(`Article #${item.article_id} introuvable.`);
+                }
+
+                const upp = art.units_per_pack ?? 1;
+                const effectiveQty =
+                    item.quantity_type === 'PACK'
+                        ? item.quantity * upp
+                        : item.quantity;
+
+                if (art.current_stock < effectiveQty) {
+                    throw new Error(
+                        `Stock insuffisant pour « ${art.name} » : ${art.current_stock} dispo, ${effectiveQty} demandé.`,
+                    );
+                }
+
+                const lineSubtotal = item.quantity * item.unit_price;
+                subtotal += lineSubtotal;
+
+                lines.push({
+                    article_id: item.article_id,
+                    quantity: item.quantity,
+                    quantity_type: item.quantity_type,
+                    unit_price: item.unit_price,
+                    subtotal: lineSubtotal,
+                    effective_qty: effectiveQty,
+                    stock_before: art.current_stock,
+                    stock_after: art.current_stock - effectiveQty,
+                });
+            }
+
+            const totalAmount = Math.max(0, subtotal - input.discount);
+            const changeAmount = Math.max(0, input.amount_paid - totalAmount);
+
+            // ---- 3) Insérer la vente
+            const saleRes = await db.runAsync(
+                `INSERT INTO sales
+                    (organization_id, user_id, cash_register_id, reference,
+                     subtotal, discount, tax, total_amount, payment_method,
+                     payment_status, amount_paid, change_amount,
+                     customer_name, customer_phone, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'PAID', ?, ?, ?, ?, ?)`,
+                [
+                    input.organization_id,
+                    input.user_id,
+                    input.cash_register_id,
+                    reference,
+                    subtotal,
+                    input.discount,
+                    totalAmount,
+                    input.payment_method,
+                    input.amount_paid,
+                    changeAmount,
+                    input.customer_name,
+                    input.customer_phone,
+                    input.notes,
+                ],
+            );
+            saleId = saleRes.lastInsertRowId;
+
+            // ---- 4) Insérer les items + mouvements + màj stock
+            for (const line of lines) {
+                await db.runAsync(
+                    `INSERT INTO sale_items
+                        (organization_id, sale_id, article_id, quantity,
+                         quantity_type, unit_price, discount, subtotal)
+                     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+                    [
+                        input.organization_id,
+                        saleId,
+                        line.article_id,
+                        line.quantity,
+                        line.quantity_type,
+                        line.unit_price,
+                        line.subtotal,
+                    ],
+                );
+
+                await db.runAsync(
+                    `INSERT INTO stock_movements
+                        (organization_id, article_id, user_id, movement_type,
+                         quantity, quantity_type, stock_before, stock_after,
+                         reason, reference)
+                     VALUES (?, ?, ?, 'SALE', ?, ?, ?, ?, 'Vente', ?)`,
+                    [
+                        input.organization_id,
+                        line.article_id,
+                        input.user_id,
+                        line.quantity,
+                        line.quantity_type,
+                        line.stock_before,
+                        line.stock_after,
+                        reference,
+                    ],
+                );
+
+                await db.runAsync(
+                    `UPDATE articles
+                     SET current_stock = ?, updated_at = datetime('now')
+                     WHERE id = ?`,
+                    [line.stock_after, line.article_id],
+                );
+            }
+
+            // ---- 5) Cash input + maj caisse
+            if (input.cash_register_id) {
+                await db.runAsync(
+                    `INSERT INTO cash_inputs
+                        (organization_id, cash_register_id, sale_id, user_id,
+                         amount, source, reference)
+                     VALUES (?, ?, ?, ?, ?, 'SALE', ?)`,
+                    [
+                        input.organization_id,
+                        input.cash_register_id,
+                        saleId,
+                        input.user_id,
+                        totalAmount,
+                        reference,
+                    ],
+                );
+
+                await db.runAsync(
+                    `UPDATE cash_registers
+                     SET total_input = total_input + ?, updated_at = datetime('now')
+                     WHERE id = ?`,
+                    [totalAmount, input.cash_register_id],
+                );
+            }
+        });
+
+        return { sale_id: saleId, reference };
+    },
+
+    // ---------------------------------------------------------
+    // ANNULATION
+    // ---------------------------------------------------------
+    async cancel(saleId: number): Promise<void> {
+        const db = await getDb();
+
+        await db.withTransactionAsync(async () => {
+            const sale = await db.getFirstAsync<{
+                reference: string;
+                payment_status: string;
+                cash_register_id: number | null;
+                total_amount: number;
+                user_id: number;
+                organization_id: number | null;
+            }>(
+                `SELECT reference, payment_status, cash_register_id,
+                        total_amount, user_id, organization_id
+                 FROM sales WHERE id = ?`,
+                [saleId],
+            );
+
+            if (!sale) throw new Error('Vente introuvable.');
+            if (sale.payment_status === 'CANCELLED') {
+                throw new Error('Cette vente est déjà annulée.');
+            }
+
+            const items = await db.getAllAsync<{
+                article_id: number;
+                quantity: number;
+                quantity_type: 'PACK' | 'UNIT';
+            }>(
+                `SELECT article_id, quantity, quantity_type
+                 FROM sale_items WHERE sale_id = ?`,
+                [saleId],
+            );
+
+            // Restaure le stock
+            for (const item of items) {
+                const art = await db.getFirstAsync<{
+                    current_stock: number;
+                    units_per_pack: number | null;
+                }>(
+                    `SELECT current_stock, units_per_pack FROM articles WHERE id = ?`,
+                    [item.article_id],
+                );
+                if (!art) continue;
+
+                const upp = art.units_per_pack ?? 1;
+                const effectiveQty =
+                    item.quantity_type === 'PACK'
+                        ? item.quantity * upp
+                        : item.quantity;
+
+                const stockBefore = art.current_stock;
+                const stockAfter = stockBefore + effectiveQty;
+
+                await db.runAsync(
+                    `INSERT INTO stock_movements
+                        (organization_id, article_id, user_id, movement_type,
+                         quantity, quantity_type, stock_before, stock_after,
+                         reason, reference)
+                     VALUES (?, ?, ?, 'RETURN', ?, ?, ?, ?, 'Annulation vente', ?)`,
+                    [
+                        sale.organization_id,
+                        item.article_id,
+                        sale.user_id,
+                        item.quantity,
+                        item.quantity_type,
+                        stockBefore,
+                        stockAfter,
+                        sale.reference,
+                    ],
+                );
+
+                await db.runAsync(
+                    `UPDATE articles
+                     SET current_stock = ?, updated_at = datetime('now')
+                     WHERE id = ?`,
+                    [stockAfter, item.article_id],
+                );
+            }
+
+            // Retire le cash_input associé
+            if (sale.cash_register_id) {
+                const cashInput = await db.getFirstAsync<{
+                    id: number;
+                    amount: number;
+                }>(
+                    `SELECT id, amount FROM cash_inputs WHERE sale_id = ?`,
+                    [saleId],
+                );
+
+                if (cashInput) {
+                    await db.runAsync(
+                        `DELETE FROM cash_inputs WHERE id = ?`,
+                        [cashInput.id],
+                    );
+                    await db.runAsync(
+                        `UPDATE cash_registers
+                         SET total_input = MAX(0, total_input - ?),
+                             updated_at = datetime('now')
+                         WHERE id = ?`,
+                        [cashInput.amount, sale.cash_register_id],
+                    );
+                }
+            }
+
+            await db.runAsync(
+                `UPDATE sales
+                 SET payment_status = 'CANCELLED', updated_at = datetime('now')
+                 WHERE id = ?`,
+                [saleId],
+            );
+        });
+    },
+};
+
+################################################################################
+# FICHIER : src/data/repositories/saleItems.repo.ts
+################################################################################
+
+
+
+################################################################################
+# FICHIER : src/data/types/sale.ts
+################################################################################
+
+// src/data/types/sale.ts
+export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE' | 'CREDIT' | 'OTHER';
+export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';
+export type QuantityType = 'PACK' | 'UNIT';
+
+export type Sale = {
+    id: number;
+    organization_id: number | null;
+    user_id: number;
+    cash_register_id: number | null;
+    reference: string;
+    subtotal: number;
+    discount: number;
+    tax: number;
+    total_amount: number;
+    payment_method: PaymentMethod;
+    payment_status: PaymentStatus;
+    amount_paid: number;
+    change_amount: number;
+    customer_name: string | null;
+    customer_phone: string | null;
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+};
+
+export type SaleRow = Sale & {
+    user_name: string | null;
+};
+
+export type SaleItem = {
+    id: number;
+    organization_id: number | null;
+    sale_id: number;
+    article_id: number;
+    quantity: number;
+    quantity_type: QuantityType;
+    unit_price: number;
+    discount: number;
+    subtotal: number;
+    created_at: string;
+    updated_at: string;
+};
+
+export type SaleItemRow = SaleItem & {
+    article_name: string | null;
+    article_sku: string | null;
+    article_units_per_pack: number | null;
+};
+
+export type SaleFilters = {
+    search?: string;
+    status?: PaymentStatus | '';
+    payment_method?: PaymentMethod | '';
+};
+
+export type NewSaleItem = {
+    article_id: number;
+    quantity: number;
+    quantity_type: QuantityType;
+    unit_price: number;
+};
+
+export type NewSaleInput = {
+    organization_id: number | null;
+    user_id: number;
+    cash_register_id: number | null;
+    items: NewSaleItem[];
+    payment_method: PaymentMethod;
+    amount_paid: number;
+    discount: number;
+    customer_name: string | null;
+    customer_phone: string | null;
+    notes: string | null;
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+    CASH: 'Espèces',
+    CARD: 'Carte',
+    MOBILE: 'Mobile Money',
+    CREDIT: 'Crédit',
+    OTHER: 'Autre',
+};
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+    PENDING: 'En attente',
+    PARTIAL: 'Partiel',
+    PAID: 'Payée',
+    CANCELLED: 'Annulée',
+};
+
+/** Calcule le prix unitaire selon le type de vente. */
+export function resolveUnitPrice(
+    article: {
+        price: number;
+        unit_type: QuantityType;
+        unit_price: number | null;
+        units_per_pack: number | null;
+    },
+    quantityType: QuantityType,
+): number {
+    if (quantityType === 'PACK') return Number(article.price || 0);
+    if (article.unit_type === 'PACK') {
+        if (article.unit_price) return Number(article.unit_price);
+        const upp = Number(article.units_per_pack || 1);
+        return upp > 0 ? Number(article.price || 0) / upp : Number(article.price || 0);
+    }
+    return Number(article.price || 0);
+}
+
+################################################################################
+# FICHIER : src/store/cart.store.ts
+################################################################################
+
+// panier POS
+
+################################################################################
+# FICHIER : package.json
+################################################################################
+
+{
+  "name": "kitunga-pos",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/drawer": "^7.14.2",
+    "@react-navigation/elements": "^2.9.44",
+    "@react-navigation/native-stack": "^7.19.2",
+    "babel-preset-expo": "~57.0.0",
+    "expo": "~57.0.25",
+    "expo-bluetooth-printer": "^4.0.0",
+    "expo-dev-client": "~57.0.19",
+    "expo-image": "~57.0.5",
+    "expo-localization": "~57.0.2",
+    "expo-print": "~57.0.2",
+    "expo-sqlite": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "lucide-react-native": "^1.47.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}
+
+################################################################################
+# FICHIER : app.json
+################################################################################
+
+{
+  "expo": {
+    "name": "Mogroso-Pharma",
+    "slug": "mogroso-pharma",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gmkdev.mogroso"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gmkdev.mogroso"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-localization",
+      "expo-status-bar",
+      "expo-image"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a8898f87-c9bf-4e60-afff-fdd27cec940b"
+      }
+    }
+  }
+}
+
+################################################################################
+# FICHIER : app.config.js
+################################################################################
+
+[FICHIER ABSENT — ignoré] app.config.js
+
+################################################################################
+# FICHIER : tsconfig.json
+################################################################################
+
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  }
+}
+
+################################################################################
+# FICHIER : src/types/index.ts
+################################################################################
+
+// src/types/index.ts
+
+export type * from './auth';
+export type * from './navigation';
+export type * from './ui';
+
+import type { Auth } from './auth';
+
+/**
+ * Équivalent RN de l'ancien SharedData d'Inertia.
+ * En web, Laravel injecte ces données à chaque requête.
+ * En RN offline, elles viennent de Zustand + AsyncStorage.
+ */
+export type SharedData = {
+    name: string;
+    auth: Auth | null;      // null car pas d'auth au démarrage
+    sidebarOpen: boolean;   // gardé pour compat, mais non utilisé en RN
+    [key: string]: unknown;
+};
+
+################################################################################
+# FICHIER : src/data/types/index.ts
+################################################################################
+
+
+
+################################################################################
+# FICHIER : src/navigation/routes.ts
+################################################################################
+
+// src/navigation/routes.ts
+
+/**
+ * Catalogue central des écrans React Native.
+ * Remplace les helpers Wayfinder (`articles.index()`, etc.)
+ * du projet web, qui ne sont pas utilisables côté RN.
+ */
+export const ROUTES = {
+    // --- App ---
+    Dashboard: 'Dashboard',
+
+    // --- Articles ---
+    Articles: {
+        List:   'Articles.List',
+        Show:   'Articles.Show',
+        Create: 'Articles.Create',
+        Edit:   'Articles.Edit',
+    },
+
+    // --- Categories ---
+    Categories: {
+        List:   'Categories.List',
+        Show:   'Categories.Show',
+        Create: 'Categories.Create',
+        Edit:   'Categories.Edit',
+    },
+
+    // --- Stock ---
+    Stock: {
+        Movements:       'Stock.Movements',
+        MovementCreate:  'Stock.MovementCreate',
+    },
+
+    // --- Cash (Caisse) ---
+    Cash: {
+        Dashboard: 'Cash.Dashboard',
+        List:      'Cash.List',
+        Show:      'Cash.Show',
+    },
+
+    // --- Sales (Ventes / POS) ---
+    Sales: {
+        POS:  'Sales.POS',
+        List: 'Sales.List',
+        Show: 'Sales.Show',
+    },
+
+    // --- Reports ---
+    Reports: {
+        Index: 'Reports.Index',
+        Sales: 'Reports.Sales',
+        Cash:  'Reports.Cash',
+        Stock: 'Reports.Stock',
+    },
+
+    // --- Admin ---
+    Admin: {
+        Users: {
+            List:   'Admin.Users.List',
+            Show:   'Admin.Users.Show',
+            Create: 'Admin.Users.Create',
+            Edit:   'Admin.Users.Edit',
+        },
+    },
+
+    // --- Organization ---
+    Organization: {
+        Show:             'Organization.Show',
+        AcceptInvitation: 'Organization.AcceptInvitation',
+    },
+
+    // --- Settings ---
+    Settings: {
+        Profile:    'Settings.Profile',
+        Password:   'Settings.Password',
+        Appearance: 'Settings.Appearance',
+        TwoFactor:  'Settings.TwoFactor',
+        Printer:    'Settings.Printer',
+    },
+} as const;
+
+################################################################################
+# FICHIER : src/navigation/types.ts
+################################################################################
+
+// src/navigation/types.ts
+
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
+// -------------------------------------------------------------
+// Paramètres par écran (undefined = pas de params)
+// -------------------------------------------------------------
+export type RootStackParamList = {
+    Main: NavigatorScreenParams<DrawerParamList> | undefined;
+
+    // Articles
+    'Articles.Show':   { id: number };
+    'Articles.Create': undefined;
+    'Articles.Edit':   { id: number };
+
+    // Catégories
+    'Categories.Show':   { id: number };
+    'Categories.Create': undefined;
+    'Categories.Edit':   { id: number };
+
+    // Stock
+    'Stock.MovementCreate': undefined;
+
+    // Caisse
+    'Cash.Show': { id: number };
+
+    // Ventes
+    'Sales.Show': { id: number };
+
+    // Rapports
+    'Reports.Sales': undefined;
+    'Reports.Cash':  undefined;
+    'Reports.Stock': undefined;
+
+    // Admin
+    'Admin.Users.Show':   { id: number };
+    'Admin.Users.Create': undefined;
+    'Admin.Users.Edit':   { id: number };
+
+    // Paramètres
+    'Settings.Password':   undefined;
+    'Settings.Appearance': undefined;
+    'Settings.TwoFactor':  undefined;
+    'Settings.Printer':    undefined;
+
+    // Divers
+    Search: undefined;
+};
+
+export type DrawerParamList = {
+    Dashboard:          undefined;
+    'Sales.POS':        undefined;
+    'Articles.List':    undefined;
+    'Categories.List':  undefined;
+    'Stock.Movements':  undefined;
+    'Cash.Dashboard':   undefined;
+    'Sales.List':       undefined;
+    'Reports.Index':    undefined;
+    'Admin.Users.List': undefined;
+    'Settings.Profile': undefined;
+};
+
+declare global {
+    namespace ReactNavigation {
+        interface RootParamList extends RootStackParamList {}
+    }
+}
+
+================================================================================
+FIN DU DUMP — 16 OK / 0 erreur(s)
+================================================================================

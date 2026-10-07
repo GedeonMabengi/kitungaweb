@@ -1,6 +1,8 @@
 // src/screens/articles/ArticleForm.tsx
 import * as React from 'react';
-npx expo install @react-navigation/elements
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from '../../components/layout/KeyboardAwareScrollView';
+
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
