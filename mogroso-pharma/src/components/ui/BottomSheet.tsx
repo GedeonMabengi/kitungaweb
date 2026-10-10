@@ -3,7 +3,6 @@ import * as React from 'react';
 import {
     KeyboardAvoidingView,
     Modal as RNModal,
-    Platform,
     Pressable,
     ScrollView,
     StyleProp,
@@ -62,8 +61,7 @@ export function BottomSheet({
         >
             <KeyboardAvoidingView
                 style={styles.overlay}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={0}
+                behavior="padding"
             >
                 <Pressable
                     testID={testID}

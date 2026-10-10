@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
-    Platform,
     StyleSheet,
     Text,
     View,
@@ -61,10 +60,7 @@ export default function App() {
     return (
         <SafeAreaProvider>
             <StatusBar style="dark" />
-            <KeyboardAvoidingView
-                style={styles.flex}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
+            <KeyboardAvoidingView style={styles.flex} behavior="padding">
                 <NavigationContainer>
                     <RootNavigator />
                 </NavigationContainer>
